@@ -1166,7 +1166,7 @@
             closePlayerView();
         }
         
-        function resetWebsite() {
+        function resetWebsite() 
   // Chỉ reset giao diện và dữ liệu tạm
   localStorage.removeItem("selectedTab");
   localStorage.removeItem("searchText");
@@ -1177,7 +1177,58 @@
   // Không xóa bucket videos
 
   window.location.reload();
+} 
+CREATE POLICY "Anyone can view videos"
+ON public.videos
+FOR SELECT
+TO anon, authenticated
+USING (true);
+   import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  "SUPABASE_URL_CUA_BAN",
+  "SUPABASE_ANON_KEY_CUA_BAN"
+);
+
+// Đăng video lên kho lưu trữ
+export async function uploadVideo(file, title) {
+  const filePath = `${Date.now()}-${file.name}`;
+
+  const { data, error } = await supabase.storage
+    .from("videos")
+    .upload(filePath, file);
+
+  if (error) throw error;
+
+  const { error: dbError } = await supabase
+    .from("videos")
+    .insert({
+      title,
+      storage_path: data.path
+    });
+
+  if (dbError) throw dbError;
+
+  return data.path;
 }
+
+// Lấy lại toàn bộ video đã đăng
+export async function getVideos() {
+  const { data, error } = await supabase
+    .from("videos")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return data.map(video => ({
+    ...video,
+    videoUrl: supabase.storage
+      .from("videos")
+      .getPublicUrl(video.storage_path).data.publicUrl
+  }));
+}     
+        
     </script>
 </body>
 </html>
