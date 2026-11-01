@@ -1165,6 +1165,19 @@
             deleteVideo(null, activeVideo.id);
             closePlayerView();
         }
+        
+        function resetWebsite() {
+  // Chỉ reset giao diện và dữ liệu tạm
+  localStorage.removeItem("selectedTab");
+  localStorage.removeItem("searchText");
+  sessionStorage.clear();
+
+  // Không xóa video trên Supabase
+  // Không xóa bảng videos
+  // Không xóa bucket videos
+
+  window.location.reload();
+}
     </script>
 </body>
 </html>
