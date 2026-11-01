@@ -1227,7 +1227,68 @@ export async function getVideos() {
       .from("videos")
       .getPublicUrl(video.storage_path).data.publicUrl
   }));
-}     
+}    -- Tạo bảng lưu thông tin video
+CREATE TABLE IF NOT EXISTS public.videos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    storage_path TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Bật bảo vệ dữ liệu bằng RLS
+ALTER TABLE public.videos ENABLE ROW LEVEL SECURITY;
+
+-- Cấp quyền xem và đăng video cho mọi người
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT ON public.videos TO anon, authenticated;
+
+-- Cho phép mọi người xem danh sách video
+DROP POLICY IF EXISTS "Everyone can view videos" ON public.videos;
+
+CREATE POLICY "Everyone can view videos"
+ON public.videos
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
+-- Cho phép mọi người đăng video
+DROP POLICY IF EXISTS "Everyone can upload video info" ON public.videos;
+
+CREATE POLICY "Everyone can upload video info"
+ON public.videos
+FOR INSERT
+TO anon, authenticated
+WITH CHECK (
+    char_length(title) BETWEEN 1 AND 120
+    AND char_length(storage_path) > 0
+);
+
+-- Tạo kho video công khai, giới hạn 100 MB/video
+INSERT INTO storage.buckets (
+    id,
+    name,
+    public,
+    file_size_limit
+)
+VALUES (
+    'videos',
+    'videos',
+    true,
+    104857600
+)
+ON CONFLICT (id)
+DO UPDATE SET
+    public = true,
+    file_size_limit = 104857600;
+
+-- Cho phép tất cả khách truy cập tải video lên
+DROP POLICY IF EXISTS "Everyone can upload video files" ON storage.objects;
+
+CREATE POLICY "Everyone can upload video files"
+ON storage.objects
+FOR INSERT
+TO anon, authenticated
+WITH CHECK (bucket_id = 'videos'); 
         
     </script>
 </body>
