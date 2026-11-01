@@ -1289,7 +1289,141 @@ ON storage.objects
 FOR INSERT
 TO anon, authenticated
 WITH CHECK (bucket_id = 'videos'); 
-        
+    
+-- 1. Tạo bảng hồ sơ người dùng
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    display_name TEXT NOT NULL DEFAULT 'Thành viên',
+    avatar_path TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT ON public.profiles TO anon, authenticated;
+GRANT INSERT, UPDATE ON public.profiles TO authenticated;
+
+-- Ai cũng xem được hồ sơ và ảnh đại diện
+CREATE POLICY "Public can view profiles"
+ON public.profiles
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
+-- Mỗi người chỉ được tạo hồ sơ của mình
+CREATE POLICY "Users create own profile"
+ON public.profiles
+FOR INSERT
+TO authenticated
+WITH CHECK (id = auth.uid());
+
+-- Mỗi người chỉ được sửa hồ sơ của mình
+CREATE POLICY "Users update own profile"
+ON public.profiles
+FOR UPDATE
+TO authenticated
+USING (id = auth.uid())
+WITH CHECK (id = auth.uid());
+
+-- 2. Liên kết video với người đăng
+ALTER TABLE public.videos
+ADD COLUMN IF NOT EXISTS user_id UUID
+REFERENCES public.profiles(id)
+ON DELETE SET NULL;
+
+-- Chỉ cho phép tài khoản hiện tại đăng video dưới danh tính của mình
+DROP POLICY IF EXISTS "Everyone can upload video info"
+ON public.videos;
+
+CREATE POLICY "Authenticated visitors upload own videos"
+ON public.videos
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    user_id = auth.uid()
+    AND char_length(title) BETWEEN 1 AND 120
+);
+
+-- 3. Tạo kho ảnh đại diện
+INSERT INTO storage.buckets (
+    id,
+    name,
+    public,
+    file_size_limit,
+    allowed_mime_types
+)
+VALUES (
+    'avatars',
+    'avatars',
+    true,
+    5242880,
+    ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+ON CONFLICT (id)
+DO UPDATE SET
+    public = true,
+    file_size_limit = 5242880,
+    allowed_mime_types = ARRAY[
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif'
+    ];
+
+-- Mỗi người chỉ được tải ảnh vào thư mục mang ID của mình
+DROP POLICY IF EXISTS "Users upload own avatars"
+ON storage.objects;
+
+CREATE POLICY "Users upload own avatars"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+);
+  });
+
+// CẬP NHẬT VIDEO KHI CÓ NGƯỜI KHÁC ĐĂNG
+function subscribeVideos() {
+
+    supabase
+        .channel("public-video-feed")
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "videos"
+            },
+            () => loadVideos()
+        )
+        .subscribe();
+}
+
+// KHỞI ĐỘNG WEBSITE
+async function init() {
+
+    try {
+
+        await ensureIdentity();
+
+        await loadVideos();
+
+        subscribeVideos();
+
+    } catch (error) {
+
+        console.error(error);
+
+        $("profileName").textContent =
+            "Không thể tải hồ sơ";
+
+        $("status").textContent =
+            "Lỗi kết nối: " + error.message;
+    }
+}
+  
     </script>
 </body>
 </html>
