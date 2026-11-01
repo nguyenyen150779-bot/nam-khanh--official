@@ -1400,30 +1400,6 @@ function subscribeVideos() {
         )
         .subscribe();
 }
-
-// KHỞI ĐỘNG WEBSITE
-async function init() {
-
-    try {
-
-        await ensureIdentity();
-
-        await loadVideos();
-
-        subscribeVideos();
-
-    } catch (error) {
-
-        console.error(error);
-
-        $("profileName").textContent =
-            "Không thể tải hồ sơ";
-
-        $("status").textContent =
-            "Lỗi kết nối: " + error.message;
-    }
-}
-  
     </script>
 </body>
 </html>
